@@ -1,9 +1,8 @@
 import http.server
-import re
-import subprocess
+import socket
 from pathlib import Path
 
-PORT = 8000
+PORT = 8079
 ROOT = Path(__file__).resolve().parent
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -18,20 +17,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 def local_ip():
-    output = subprocess.check_output(
-        ["ipconfig"],
-        text=True,
-        encoding="utf-8",
-        errors="ignore",
-    )
-
-    for ip in re.findall(r"IPv4[^:]*:\s*([\d.]+)", output):
-        if ip.startswith("192.168."):
-            return ip
-
-    return "localhost"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            return s.getsockname()[0]
+    except OSError:
+        return "localhost"
 
 if __name__ == "__main__":
     with http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as server:
-        print(f"http://{local_ip()}:{PORT}/")
+        print(f"http://{local_ip()}:{PORT}/", flush=True)
         server.serve_forever()
