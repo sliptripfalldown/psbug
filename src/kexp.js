@@ -5,7 +5,7 @@ const PROT_RW = 0x3, PROT_RWX = 0x7;
 const MAP_SHARED = 0x1, MAP_PRIVATE_ANON = 0x1002;
 
 const DEFAULT_KEXP = "kexp_2026_05_25.bin";
-const DEFAULT_ELFLDR = "kdumper-kernel.elf"; // dump-boot v2: naked entry, -1360 contract
+const DEFAULT_ELFLDR = "elfldr-ps5-1360.elf";
 
 const SHELLCODE = {
   size: 18912,
