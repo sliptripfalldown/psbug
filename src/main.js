@@ -262,7 +262,14 @@ async function prepareRop(p) {
 async function main(userlandRW) {
   const { p, chain } = await prepareRop(userlandRW);
   const { runKernelExploit } = await import("./relapse_exploit.js");
-  const result = await runKernelExploit(p, chain, log);
+  const result = await runKernelExploit(p, chain, log, async (kern) => {
+    try {
+      const { dumpKernel } = await import("./probe.js");
+      await dumpKernel({ kbase: kern.kbase, kern }, log);
+    } catch (e) {
+      log("probe failed: " + e);
+    }
+  });
   if (!result || !result.done)
     throw new Error("kernel exploit did not finish");
 
@@ -276,12 +283,6 @@ async function main(userlandRW) {
       log("autoload pushed: pldmgr_v0.5.2.elf", "info");
     } catch (e) {
       log("autoload push failed: " + e);
-    }
-    try {
-      const { dumpKernel } = await import("./probe.js");
-      await dumpKernel(result, log);
-    } catch (e) {
-      log("probe failed: " + e);
     }
   } else {
     log("kernel chain complete: root and sandbox escape are active", "info");
