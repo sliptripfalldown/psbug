@@ -16,6 +16,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def do_POST(self):
+        prefix = "/dump/"
+        if not self.path.startswith(prefix):
+            self.send_error(404)
+            return
+        name = Path(self.path[len(prefix):]).name
+        if not name or not all(c.isalnum() or c in "._-" for c in name):
+            self.send_error(400)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        if length > 1 << 20:
+            self.send_error(413)
+            return
+        body = self.rfile.read(length)
+        (ROOT / "dumps").mkdir(exist_ok=True)
+        with open(ROOT / "dumps" / name, "ab") as f:
+            f.write(body)
+        self.send_response(204)
+        self.end_headers()
+
 def local_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:

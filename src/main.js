@@ -277,6 +277,12 @@ async function main(userlandRW) {
     } catch (e) {
       log("autoload push failed: " + e);
     }
+    try {
+      const { dumpKernel } = await import("./probe.js");
+      await dumpKernel(result, log);
+    } catch (e) {
+      log("probe failed: " + e);
+    }
   } else {
     log("kernel chain complete: root and sandbox escape are active", "info");
   }
