@@ -14,10 +14,11 @@ function collectorBase() {
 }
 
 async function postPart(name, bytes) {
+  // Blob body: old WebKit rejects typed-array fetch bodies before sending
   await fetch(collectorBase() + "/dump/" + name, {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
-    body: bytes,
+    body: new Blob([bytes], { type: "text/plain" }),
   });
 }
 

@@ -26,7 +26,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(400)
             return
         length = int(self.headers.get("Content-Length", 0))
-        if length > 1 << 20:
+        if length > 8 << 20:
             self.send_error(413)
             return
         body = self.rfile.read(length)
@@ -34,6 +34,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with open(ROOT / "dumps" / name, "ab") as f:
             f.write(body)
         self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
 def local_ip():
