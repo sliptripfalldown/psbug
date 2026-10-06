@@ -269,6 +269,14 @@ async function main(userlandRW) {
   if (result.payloads) {
     log("kernel exploit complete", "info");
     log("elfldr is listening on port 9021", "info");
+    try {
+      const uri = new URL("payloads/pldmgr_v0.5.2.elf", location.href).href;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await fetch("http://127.0.0.1:9021/?uri=" + encodeURIComponent(uri), { mode: "no-cors" });
+      log("autoload pushed: pldmgr_v0.5.2.elf", "info");
+    } catch (e) {
+      log("autoload push failed: " + e);
+    }
   } else {
     log("kernel chain complete: root and sandbox escape are active", "info");
   }
