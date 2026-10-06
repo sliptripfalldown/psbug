@@ -3,9 +3,12 @@
 // is adaptive: start at 1MB, halve on short reads, so total ROP volume
 // stays tiny regardless of what the forged pipe accepts.
 
-const TOTAL = 4 * 1024 * 1024; // kernel text to capture
-const MAX_CHUNK = 0x100000;    // 1MB
-const MIN_CHUNK = 0x4000;      // 16KB floor (= stock pipe size)
+// ponytail: 256KB at stock 4KB reads = exploit-scale ROP volume; the
+// kernel-mediated path panics at dump-scale (observed at 1MB and 4MB
+// budgets). Raise TOTAL only with evidence, not hope.
+const TOTAL = 256 * 1024;
+const MAX_CHUNK = 0x1000; // stock pipe size — proven per-op by the exploit
+const MIN_CHUNK = 0x1000;
 
 async function postPart(name, bytes) {
   const ctrl = new AbortController();
