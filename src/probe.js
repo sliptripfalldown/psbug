@@ -7,10 +7,9 @@ const PARTS = 8;       // 4MB total kernel text
 const LC_MEMCPY = 0x3e00; // window.SYMBOLS.libc.memcpy, libSceLibcInternal
 
 function collectorBase() {
-  return typeof location !== "undefined" &&
-    location.origin.startsWith("http://192.168.10.210")
-    ? ""
-    : "http://192.168.10.210:8079";
+  // Same-origin always: console WebKit blocks cross-origin fetch outright.
+  // The serving pod stores parts under ./dumps; retrieve with kubectl cp.
+  return "";
 }
 
 async function postPart(name, bytes) {
